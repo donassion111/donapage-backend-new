@@ -12,5 +12,8 @@
         "dest": "server.js"
       }
     ],
-    "regions": ["iad1"] // Région de Washington D.C.
-  }
+    "regions": ["iad1"],
+    "engines": {
+      "node": "18.x"
+    }
+}
